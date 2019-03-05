@@ -1,0 +1,93 @@
+---
+- name: Save Config to Git Repo
+  hosts: all
+  connection: network_cli
+  vars_files:
+    - /vagrant/equifax_automation/user_access
+  vars:
+    device_config_folder: './configs'
+    git_repo: '../config_backup'
+
+  tasks:
+  - name: Get Time
+    command: date
+    register: timestamp
+    changed_when: false
+    delegate_to: localhost
+    run_once: yes
+
+  - name: Create Folder to store config
+    file: path={{device_config_folder}}  state=directory
+    delegate_to: localhost
+    run_once: yes
+
+  - name: Try to switch to target branch
+    block:
+      - name: switch to target branch
+        command: git checkout {{git_branch|default('config_backup')}}
+        args:
+          chdir: "{{ git_repo }}"
+        changed_when: false
+          
+    rescue:    
+      - name: Create and switch to target repo
+        command: git checkout -b {{git_branch|default('config_backup')}}
+        args:
+          chdir: "{{ git_repo }}"
+        changed_when: false
+    delegate_to: localhost
+    run_once: yes
+
+  - name: Syncronize with remote branch
+    command: git pull origin master
+    args:
+      chdir: "{{ git_repo }}"
+    changed_when: false
+    delegate_to: localhost
+    run_once: yes
+ 
+  - name: Get Running Config from All devices
+    block:
+    - name: Get show running from all devices
+      cli_command: 
+        command: "{{show_run_cmd}}"
+      register: cmd
+    - name: copy Runnig configuration to backup folder
+      copy:
+        content: "{{ cmd.stdout }}"
+        dest: "configs/{{inventory_hostname}}.cfg"
+
+  - name: Remove Not needed Lines in the Configuration Files
+    lineinfile:
+      path: '{{device_config_folder}}/{{inventory_hostname}}.cfg'
+      regexp: '## Last .*'
+      state: absent
+    delegate_to: localhost
+
+  - name: Check the directory status
+    command: git status
+    args:
+      chdir: "{{git_repo}}"
+    register: changes
+    changed_when: false
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "Add files to Git staging area, commit and push"
+    shell: |
+      git add .
+      git commit -m "Device Backup on {{timestamp.stdout}} "
+      git push origin {{git_branch|default('config_backup')}}
+    args:
+      chdir: "{{git_repo}}"
+    when: not("working directory clean" in changes.stdout)
+    delegate_to: localhost
+    run_once: yes
+
+  - name: return to master branch
+    command: git checkout master
+    args:
+      chdir: "{{git_repo}}"
+    changed_when: false
+    delegate_to: localhost
+    run_once: yes
