@@ -1,8 +1,6 @@
 ---
 - name: Save Config to Git Repo
   hosts: all
-  vars_files:
-    - /vagrant/equifax_automation/user_access
   vars:
     device_config_folder: './configs'
     git_repo: '../config_backup'
