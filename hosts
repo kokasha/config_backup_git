@@ -24,5 +24,7 @@ ansible_network_os=junos
 show_run_cmd='show configuration'
 
 [all:vars]
+ansible_ssh_user=lab
+ansible_ssh_pass=lab123
 ansible_connection=network_cli
 ansible_port=22
